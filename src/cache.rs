@@ -1,15 +1,17 @@
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
+
+const Default_Expiration: u64 = 0;
 
 pub struct Item {
-    object: i64,
-    Expiration: u64,
+    object: u64,
+    expiration: SystemTime,
 }
 
 pub struct Cache {
-    default_expiration: Duration,
+    default_expiration: u64,
     items: HashMap<String, Item>,
     janitor: Janitor,
 }
@@ -19,7 +21,7 @@ pub struct Janitor {
 }
 
 pub fn new_cache(
-    default_expiration: Duration,
+    default_expiration: u64,
     clean_expiration: u64,
     items: HashMap<String, Item>,
 ) -> Arc<RwLock<Cache>> {
@@ -34,21 +36,17 @@ pub fn new_cache(
     return Arc::new(RwLock::new(c));
 }
 
-pub fn new(
-    default_expiration: Duration,
-    clean_expiration: u64,
-    items: HashMap<String, Item>,
-) -> Arc<RwLock<Cache>> {
+pub fn new(default_expiration: u64, clean_expiration: u64) -> Arc<RwLock<Cache>> {
     let items = HashMap::new();
     return new_cache_with_janitor(default_expiration, clean_expiration, items);
 }
 
 fn new_cache_with_janitor(
-    default_expiration: Duration,
+    default_expiration: u64,
     clean_expiration: u64,
     items: HashMap<String, Item>,
 ) -> Arc<RwLock<Cache>> {
-    let c = new(default_expiration, clean_expiration, items);
+    let c = new_cache(default_expiration, clean_expiration, items);
 
     if clean_expiration > 0 {
         // start clean up janitor
@@ -59,4 +57,41 @@ fn new_cache_with_janitor(
     return c;
 }
 
-fn Set(k: String, v: i64, d: Duration) {}
+impl Cache {
+    pub fn set(&mut self, key: String, value: u64, ed: u64) {
+        let expiration_time = SystemTime::now().checked_add(Duration::from_secs(ed));
+        // TODO: REMOVE UNWRAP
+        let i = Item {
+            object: value,
+            expiration: expiration_time.unwrap(),
+        };
+        self.items.insert(key, i);
+    }
+
+    pub fn set_with_default_exp(&mut self, key: String, value: u64) {
+        self.set(key, value, Default_Expiration)
+    }
+
+    pub fn get(&self, key: String) -> u64 {
+        if let Some(i) = self.items.get(&key) {
+            if SystemTime::now() > i.expiration {
+                return 0;
+            }
+            return i.object;
+        }
+        0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_set_u64() {
+        unimplemented!();
+    }
+
+    #[test]
+    fn test_set_default() {
+        unimplemented!();
+    }
+}
