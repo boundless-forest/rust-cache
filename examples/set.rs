@@ -1,8 +1,11 @@
 use rust_cache::cache;
+use std::time::Duration;
 
 fn main() {
-    let mut cache = cache::new(0, 0);
-    cache.set_with_default_exp("test", 2);
+    let mut cache = cache::new(100, 0);
+    cache.set("test".to_string(), 2, 100);
 
-    assert!(cache.get("test"), 2)
+    assert_eq!(cache.get("test".to_string()), 2);
+    std::thread::sleep(Duration::from_secs(200));
+    assert_eq!(cache.get("test".to_string()), 0);
 }
