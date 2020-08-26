@@ -2,14 +2,14 @@ use crossbeam::crossbeam_channel::tick;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::thread;
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 const DEFAULT_EXPIRATION: i64 = 0;
 
 #[derive(Debug)]
 pub struct Item {
     object: u64,
-    expiration: SystemTime,
+    expiration: u64,
 }
 
 #[derive(Clone, Debug)]
@@ -80,12 +80,10 @@ pub fn new_cache(
 
 impl Item {
     pub fn is_expired(&self) -> bool {
-        let now = SystemTime::now();
+        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
 
-        if let Ok(passed) = now.duration_since(self.expiration) {
-            if passed > Duration::from_secs(0) {
-                return true;
-            }
+        if now.as_secs() > self.expiration {
+            return true;
         }
         false
     }
@@ -100,10 +98,11 @@ impl RCache {
             ed = c.default_expiration
         }
 
-        let expiration_time = SystemTime::now().checked_add(Duration::from_secs(ed as u64));
+        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+        let expiration_time = now.checked_add(Duration::from_secs(ed as u64)).unwrap();
         let i = Item {
             object: value,
-            expiration: expiration_time.unwrap(),
+            expiration: expiration_time.as_secs(),
         };
         c.items.insert(key, i);
     }
@@ -137,7 +136,8 @@ impl RCache {
         let c = c_lock.read().unwrap();
 
         if let Some(i) = c.items.get(&key) {
-            if SystemTime::now() > i.expiration {
+            let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+            if now.as_secs() > 0 && now.as_secs() > i.expiration {
                 return Some(0);
             }
             return Some(i.object);
