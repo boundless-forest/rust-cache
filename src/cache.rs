@@ -124,12 +124,17 @@ impl RCache {
 
     pub fn delete_expired(&mut self) {
         let c_lock = self.cache.clone();
-        let mut cw = c_lock.write().unwrap();
+        let cr = c_lock.read().unwrap();
+        let mut temp_map = HashMap::new();
+        for (key, value) in cr.items.iter() {
+            temp_map.insert(key, value);
+        }
 
-        for (key, item) in cw.items.iter() {
+        let mut cw = c_lock.write().unwrap();
+        for (key, item) in temp_map.iter() {
             if item.is_expired() {
                 println!("janitor cleaned key {:?}", key);
-                let _ = cw.items.remove_entry(key);
+                let _ = cw.items.remove_entry(*key);
             }
         }
     }
@@ -164,40 +169,36 @@ mod tests {
     fn test_cache() {
         let mut tc = new(DEFAULT_EXPIRATION, 0);
 
-        assert_eq!(tc.get("a".to_string()).unwrap(), 0);
-        assert_eq!(tc.get("b".to_string()).unwrap(), 0);
-        assert_eq!(tc.get("C".to_string()).unwrap(), 0);
+        assert_eq!(tc.get("a").unwrap(), 0);
+        assert_eq!(tc.get("b").unwrap(), 0);
+        assert_eq!(tc.get("C").unwrap(), 0);
 
-        tc.set("a".to_string(), 1, DEFAULT_EXPIRATION);
-        tc.set("b".to_string(), 2, DEFAULT_EXPIRATION);
-        tc.set("C".to_string(), 3, DEFAULT_EXPIRATION);
+        tc.set("a", 1, DEFAULT_EXPIRATION);
+        tc.set("b", 2, DEFAULT_EXPIRATION);
+        tc.set("C", 3, DEFAULT_EXPIRATION);
 
-        println!("cache is {:?}", tc);
-
-        assert_eq!(tc.get("a".to_string()).unwrap(), 1);
-        assert_eq!(tc.get("b".to_string()).unwrap(), 2);
-        assert_eq!(tc.get("C".to_string()).unwrap(), 3);
+        assert_eq!(tc.get("a").unwrap(), 1);
+        assert_eq!(tc.get("b").unwrap(), 2);
+        assert_eq!(tc.get("C").unwrap(), 3);
     }
 
     #[test]
     fn test_cache_times() {
         let mut tc = new(50, 1);
-        tc.set("a".to_string(), 1, DEFAULT_EXPIRATION);
-        tc.set("b".to_string(), 2, NO_EXPIRATION);
-        tc.set("c".to_string(), 3, 20);
-        tc.set("d".to_string(), 4, 70);
+        tc.set("a", 1, DEFAULT_EXPIRATION);
+        tc.set("b", 2, NO_EXPIRATION);
+        tc.set("c", 3, 20);
+        tc.set("d", 4, 70);
 
-        println!("cache before sleep {:?}", tc);
         thread::sleep(Duration::from_secs(25));
-        // println!("cache after sleep {:?}", tc);
-        // assert_eq!(tc.get("c".to_string()).unwrap(), 0);
+        assert_eq!(tc.get("c").unwrap(), 0);
 
-        // thread::sleep(Duration::from_secs(30));
-        // assert_eq!(tc.get("a".to_string()).unwrap(), 0);
-        // assert_eq!(tc.get("b".to_string()).unwrap(), 2);
+        thread::sleep(Duration::from_secs(30));
+        assert_eq!(tc.get("a").unwrap(), 0);
+        assert_eq!(tc.get("b").unwrap(), 2);
 
-        // assert_eq!(tc.get("d".to_string()).unwrap(), 4);
-        // thread::sleep(Duration::from_secs(20));
-        // assert_eq!(tc.get("d".to_string()).unwrap(), 0);
+        assert_eq!(tc.get("d").unwrap(), 4);
+        thread::sleep(Duration::from_secs(20));
+        assert_eq!(tc.get("d").unwrap(), 0);
     }
 }
