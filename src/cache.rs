@@ -5,6 +5,7 @@ use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 const DEFAULT_EXPIRATION: i64 = 0;
+const NO_EXPIRATION: i64 = -1;
 
 #[derive(Debug)]
 pub struct Item {
@@ -81,7 +82,6 @@ pub fn new_cache(
 impl Item {
     pub fn is_expired(&self) -> bool {
         let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-
         if now.as_secs() > self.expiration {
             return true;
         }
@@ -99,7 +99,11 @@ impl RCache {
         }
 
         let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-        let expiration_time = now.checked_add(Duration::from_secs(ed as u64)).unwrap();
+        let mut expiration_time = Duration::from_secs(0);
+        if ed > 0 {
+            expiration_time = now.checked_add(Duration::from_secs(ed as u64)).unwrap();
+        }
+
         let i = Item {
             object: value,
             expiration: expiration_time.as_secs(),
@@ -122,8 +126,7 @@ impl RCache {
         let c_lock = self.cache.clone();
         let mut cw = c_lock.write().unwrap();
 
-        let cr = c_lock.write().unwrap();
-        for (key, item) in cr.items.iter() {
+        for (key, item) in cw.items.iter() {
             if item.is_expired() {
                 println!("janitor cleaned key {:?}", key);
                 let _ = cw.items.remove_entry(key);
@@ -137,7 +140,7 @@ impl RCache {
 
         if let Some(i) = c.items.get(&key) {
             let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-            if now.as_secs() > 0 && now.as_secs() > i.expiration {
+            if i.expiration > 0 && now.as_secs() > i.expiration {
                 return Some(0);
             }
             return Some(i.object);
@@ -174,5 +177,27 @@ mod tests {
         assert_eq!(tc.get("a".to_string()).unwrap(), 1);
         assert_eq!(tc.get("b".to_string()).unwrap(), 2);
         assert_eq!(tc.get("C".to_string()).unwrap(), 3);
+    }
+
+    #[test]
+    fn test_cache_times() {
+        let mut tc = new(50, 1);
+        tc.set("a".to_string(), 1, DEFAULT_EXPIRATION);
+        tc.set("b".to_string(), 2, NO_EXPIRATION);
+        tc.set("c".to_string(), 3, 20);
+        tc.set("d".to_string(), 4, 70);
+
+        println!("cache before sleep {:?}", tc);
+        thread::sleep(Duration::from_secs(25));
+        // println!("cache after sleep {:?}", tc);
+        // assert_eq!(tc.get("c".to_string()).unwrap(), 0);
+
+        // thread::sleep(Duration::from_secs(30));
+        // assert_eq!(tc.get("a".to_string()).unwrap(), 0);
+        // assert_eq!(tc.get("b".to_string()).unwrap(), 2);
+
+        // assert_eq!(tc.get("d".to_string()).unwrap(), 4);
+        // thread::sleep(Duration::from_secs(20));
+        // assert_eq!(tc.get("d".to_string()).unwrap(), 0);
     }
 }
