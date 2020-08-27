@@ -21,7 +21,7 @@ pub struct RCache {
 #[derive(Debug)]
 pub struct Cache {
     default_expiration: i64,
-    items: HashMap<String, Item>,
+    items: HashMap<&'static str, Item>,
     janitor: Janitor,
 }
 
@@ -38,7 +38,7 @@ pub fn new(default_expiration: i64, clean_expiration: i64) -> RCache {
 fn new_cache_with_janitor(
     default_expiration: i64,
     clean_expiration: i64,
-    items: HashMap<String, Item>,
+    items: HashMap<&'static str, Item>,
 ) -> RCache {
     let c = new_cache(default_expiration, clean_expiration, items);
     let mut c_clone = c.clone();
@@ -60,7 +60,7 @@ fn new_cache_with_janitor(
 pub fn new_cache(
     default_expiration: i64,
     mut clean_expiration: i64,
-    items: HashMap<String, Item>,
+    items: HashMap<&'static str, Item>,
 ) -> RCache {
     if clean_expiration == DEFAULT_EXPIRATION {
         clean_expiration = -1;
@@ -90,7 +90,7 @@ impl Item {
 }
 
 impl RCache {
-    pub fn set(&mut self, key: String, value: u64, mut ed: i64) {
+    pub fn set(&mut self, key: &'static str, value: u64, mut ed: i64) {
         let c_lock = self.cache.clone();
         let mut c = c_lock.write().unwrap();
 
@@ -111,7 +111,7 @@ impl RCache {
         c.items.insert(key, i);
     }
 
-    pub fn set_with_default_exp(&mut self, key: String, value: u64) {
+    pub fn set_with_default_exp(&mut self, key: &'static str, value: u64) {
         self.set(key, value, DEFAULT_EXPIRATION)
     }
 
@@ -134,11 +134,11 @@ impl RCache {
         }
     }
 
-    pub fn get(&self, key: String) -> Option<u64> {
+    pub fn get(&self, key: &'static str) -> Option<u64> {
         let c_lock = self.cache.clone();
         let c = c_lock.read().unwrap();
 
-        if let Some(i) = c.items.get(&key) {
+        if let Some(i) = c.items.get(key) {
             let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
             if i.expiration > 0 && now.as_secs() > i.expiration {
                 return Some(0);
