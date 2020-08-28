@@ -47,12 +47,10 @@ fn new_cache_with_janitor(
 
     // If cleanup interval gt 0, start cleanup janitor
     if clean_expiration > Duration::from_secs(0) {
-        println!("=============== start up janitor process...");
         let _ = thread::spawn(move || {
             let ticker = tick(clean_expiration);
             loop {
                 ticker.recv().unwrap();
-                println!("enter delete expired items");
                 c_clone.delete_expired()
             }
         });
@@ -135,42 +133,34 @@ impl RCache {
 
     // Delete all expired items from the cache
     pub fn delete_expired(&mut self) {
-        // let cr_lock = self.cache.clone();
-        // let cr = cr_lock.read().unwrap();
-        // let mut temp_map = HashMap::new();
-        // for (key, value) in cr.items.iter() {
-        //     temp_map.insert(key.clone(), value.clone());
-        // }
-
-        // println!("temp map {:?}", temp_map);
-        // drop(cr_lock);
-
-        let cw_lock = self.cache.clone();
-        let mut cw = cw_lock.write().unwrap();
         let items = self.get_items();
-        for entry in items.iter() {
-            let (key, item) = entry;
-            println!("==== key {:?} is_expired {:?}", key, item.is_expired());
-            if item.is_expired() {
-                println!("janitor cleaned key {:?}", key);
-                // let _ = cw.items.remove_entry(*key);
+        let cw_lock = self.cache.clone();
+        match cw_lock.try_write() {
+            Ok(mut cw) => {
+                for entry in items.iter() {
+                    let (key, item) = entry;
+                    if item.is_expired() {
+                        let _ = cw.items.remove_entry(*key);
+                    }
+                }
             }
-        }
+            Err(err) => {
+                println!("error msg {:?}", err);
+            }
+        };
     }
 
     pub fn get_items(&self) -> Vec<(&str, Item)> {
         let c_lock = self.cache.clone();
         let c = c_lock.read().unwrap();
 
-        let keys:Vec<&str> = c.items.keys().map(|s| (*s).clone()).collect();
+        let keys: Vec<&str> = c.items.keys().map(|s| (*s).clone()).collect();
         let mut items: Vec<(&str, Item)> = Vec::new();
         for key in keys.iter() {
             let value = c.items.get(key).unwrap();
             items.push((key, *value));
         }
         drop(c);
-        drop(c_lock);
-
         return items;
     }
 
@@ -181,7 +171,6 @@ impl RCache {
 
         if let Some(i) = c.items.get(key) {
             let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-            println!("key {:?}, now {:?}", key, now.as_secs());
             if i.expiration > Duration::from_secs(0) && now > i.expiration {
                 return Some(0);
             }
@@ -203,43 +192,38 @@ impl RCache {
 mod tests {
     use super::*;
 
-    // #[test]
-    // fn test_cache() {
-    //     let mut tc = new(DEFAULT_EXPIRATION, Duration::from_secs(0));
+    #[test]
+    fn test_cache() {
+        let mut tc = new(DEFAULT_EXPIRATION, Duration::from_secs(0));
 
-    //     assert_eq!(tc.get("a").unwrap(), 0);
-    //     assert_eq!(tc.get("b").unwrap(), 0);
-    //     assert_eq!(tc.get("C").unwrap(), 0);
+        assert_eq!(tc.get("a").unwrap(), 0);
+        assert_eq!(tc.get("b").unwrap(), 0);
+        assert_eq!(tc.get("C").unwrap(), 0);
 
-    //     tc.set("a", 1, DEFAULT_EXPIRATION);
-    //     tc.set("b", 2, DEFAULT_EXPIRATION);
-    //     tc.set("C", 3, DEFAULT_EXPIRATION);
+        tc.set("a", 1, DEFAULT_EXPIRATION);
+        tc.set("b", 2, DEFAULT_EXPIRATION);
+        tc.set("C", 3, DEFAULT_EXPIRATION);
 
-    //     assert_eq!(tc.get("a").unwrap(), 1);
-    //     assert_eq!(tc.get("b").unwrap(), 2);
-    //     assert_eq!(tc.get("C").unwrap(), 3);
-    // }
+        assert_eq!(tc.get("a").unwrap(), 1);
+        assert_eq!(tc.get("b").unwrap(), 2);
+        assert_eq!(tc.get("C").unwrap(), 3);
+    }
 
     #[test]
     fn test_cache_times() {
         let mut tc = new(Duration::from_secs(50), Duration::from_secs(1));
         tc.set("a", 1, DEFAULT_EXPIRATION);
-        tc.set("b", 2, NO_EXPIRATION);
         tc.set("c", 3, Duration::from_secs(20));
         tc.set("d", 4, Duration::from_secs(70));
 
         thread::sleep(Duration::from_secs(25));
-        println!("cache1 is {:?}", tc);
-        assert_eq!(tc.get("c").unwrap(), 2);
+        assert_eq!(tc.get("c").unwrap(), 0);
 
-        // thread::sleep(Duration::from_secs(30));
-        // println!("cache2 is {:?}", tc);
-        // assert_eq!(tc.get("a").unwrap(), 0);
-        // assert_eq!(tc.get("b").unwrap(), 2);
+        thread::sleep(Duration::from_secs(30));
+        assert_eq!(tc.get("a").unwrap(), 0);
 
-        // assert_eq!(tc.get("d").unwrap(), 4);
-        // thread::sleep(Duration::from_secs(20));
-        // println!("cache3 is {:?}", tc);
-        // assert_eq!(tc.get("d").unwrap(), 0);
+        assert_eq!(tc.get("d").unwrap(), 4);
+        thread::sleep(Duration::from_secs(20));
+        assert_eq!(tc.get("d").unwrap(), 0);
     }
 }
