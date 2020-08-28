@@ -4,8 +4,8 @@ use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-const DEFAULT_EXPIRATION: Duration = Duration::from_secs(0);
-const NO_EXPIRATION: Duration = Duration::from_secs(std::u64::MAX);
+pub const DEFAULT_EXPIRATION: Duration = Duration::from_secs(0);
+pub const NO_EXPIRATION: Duration = Duration::from_secs(std::u64::MAX);
 
 #[derive(Clone, Debug)]
 pub struct RCache {
@@ -100,13 +100,17 @@ impl RCache {
     pub fn set(&mut self, key: &'static str, value: u64, mut ed: Duration) {
         let c_lock = self.cache.clone();
         let mut c = c_lock.write().unwrap();
+        let mut expiration_time = Duration::from_secs(0);
 
         if ed == DEFAULT_EXPIRATION {
             ed = c.default_expiration
         }
 
+        if ed == NO_EXPIRATION {
+            expiration_time = NO_EXPIRATION;
+        }
+
         let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-        let mut expiration_time = Duration::from_secs(0);
         if ed != NO_EXPIRATION && ed > Duration::from_secs(0) {
             expiration_time = now.checked_add(ed).unwrap();
         }
@@ -213,11 +217,13 @@ mod tests {
     fn test_cache_times() {
         let mut tc = new(Duration::from_secs(50), Duration::from_secs(1));
         tc.set("a", 1, DEFAULT_EXPIRATION);
+        tc.set("b", 2, NO_EXPIRATION);
         tc.set("c", 3, Duration::from_secs(20));
         tc.set("d", 4, Duration::from_secs(70));
 
         thread::sleep(Duration::from_secs(25));
         assert_eq!(tc.get("c").unwrap(), 0);
+        assert_eq!(tc.get("b").unwrap(), 2);
 
         thread::sleep(Duration::from_secs(30));
         assert_eq!(tc.get("a").unwrap(), 0);
