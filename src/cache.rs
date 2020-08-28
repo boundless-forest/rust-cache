@@ -7,17 +7,10 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 const DEFAULT_EXPIRATION: i64 = 0;
 const NO_EXPIRATION: i64 = -1;
 
-#[derive(Debug)]
-pub struct Item {
-    object: u64,
-    expiration: u64,
-}
-
 #[derive(Clone, Debug)]
 pub struct RCache {
     cache: Arc<RwLock<Cache>>,
 }
-
 #[derive(Debug)]
 pub struct Cache {
     default_expiration: i64,
@@ -26,15 +19,24 @@ pub struct Cache {
 }
 
 #[derive(Debug)]
+pub struct Item {
+    object: u64,
+    expiration: u64,
+}
+
+#[derive(Debug)]
 pub struct Janitor {
     interval: i64,
 }
 
+// Return a new cache with a given default expiration time and
+// cleanup interval, empty items map.
 pub fn new(default_expiration: i64, clean_expiration: i64) -> RCache {
     let items = HashMap::new();
     return new_cache_with_janitor(default_expiration, clean_expiration, items);
 }
 
+// Create a cache with janitor or not
 fn new_cache_with_janitor(
     default_expiration: i64,
     clean_expiration: i64,
@@ -43,27 +45,28 @@ fn new_cache_with_janitor(
     let c = new_cache(default_expiration, clean_expiration, items);
     let mut c_clone = c.clone();
 
+    // If cleanup interval gt 0, start cleanup janitor
     if clean_expiration > 0 {
-        // start clean up janitor
         let _ = thread::spawn(move || {
-            // set time to clean
             let ticker = tick(Duration::from_secs(clean_expiration as u64));
             loop {
                 ticker.recv().unwrap();
-                println!("janitor doing clean work");
                 c_clone.delete_expired()
             }
         });
     }
     c
 }
+
 pub fn new_cache(
-    default_expiration: i64,
-    mut clean_expiration: i64,
+    mut default_expiration: i64,
+    clean_expiration: i64,
     items: HashMap<&'static str, Item>,
 ) -> RCache {
-    if clean_expiration == DEFAULT_EXPIRATION {
-        clean_expiration = -1;
+    // If the default expiration equal to DEFAULT_EXPIRATION, the items in
+    // the cache will never expire, and must be deleted manually.
+    if default_expiration == DEFAULT_EXPIRATION {
+        default_expiration = NO_EXPIRATION;
     }
 
     let c = Cache {
@@ -80,6 +83,7 @@ pub fn new_cache(
 }
 
 impl Item {
+    // Check whether an item is expired.
     pub fn is_expired(&self) -> bool {
         let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
         if now.as_secs() > self.expiration {
@@ -90,6 +94,9 @@ impl Item {
 }
 
 impl RCache {
+    // Add an item to the cache, replace any existing item
+    // If the expiration duration is zero(Default_Expiration), the cache's default
+    // expiration time is used. If it is -1(NO_EXPIRATION), the item never expired.
     pub fn set(&mut self, key: &'static str, value: u64, mut ed: i64) {
         let c_lock = self.cache.clone();
         let mut c = c_lock.write().unwrap();
@@ -111,10 +118,12 @@ impl RCache {
         c.items.insert(key, i);
     }
 
+    // Add an item to the cache, using DEFAULT_EXPIRATION
     pub fn set_with_default_exp(&mut self, key: &'static str, value: u64) {
         self.set(key, value, DEFAULT_EXPIRATION)
     }
 
+    // Delete all items from the cache
     pub fn flush(&mut self) {
         let c_lock = self.cache.clone();
         let mut c = c_lock.write().unwrap();
@@ -122,6 +131,7 @@ impl RCache {
         c.items.clear()
     }
 
+    // Delete all expired items from the cache
     pub fn delete_expired(&mut self) {
         let c_lock = self.cache.clone();
         let cr = c_lock.read().unwrap();
@@ -139,6 +149,7 @@ impl RCache {
         }
     }
 
+    // Get an item from the cache. Return NONE or item's object
     pub fn get(&self, key: &'static str) -> Option<u64> {
         let c_lock = self.cache.clone();
         let c = c_lock.read().unwrap();
@@ -153,6 +164,7 @@ impl RCache {
         Some(0)
     }
 
+    // Return the number of items in the cache.
     pub fn item_count(&self) -> usize {
         let c_lock = self.cache.clone();
         let c = c_lock.read().unwrap();
