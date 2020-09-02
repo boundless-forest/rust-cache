@@ -1,4 +1,5 @@
 use crossbeam::crossbeam_channel::tick;
+use serde_json::value::Value;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::thread;
@@ -18,9 +19,9 @@ pub struct Cache {
     janitor: Janitor,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct Item {
-    object: u64,
+    object: Value,
     expiration: Duration,
 }
 
@@ -97,7 +98,7 @@ impl RCache {
     // Add an item to the cache, replace any existing item
     // If the expiration duration is zero(Default_Expiration), the cache's default
     // expiration time is used. If it is -1(NO_EXPIRATION), the item never expired.
-    pub fn set(&mut self, key: &'static str, value: u64, mut ed: Duration) {
+    pub fn set(&mut self, key: &'static str, value: Value, mut ed: Duration) {
         let c_lock = self.cache.clone();
         let mut c = c_lock.write().unwrap();
         let mut expiration_time = Duration::from_secs(0);
@@ -123,7 +124,7 @@ impl RCache {
     }
 
     // Add an item to the cache, using DEFAULT_EXPIRATION
-    pub fn set_with_default_exp(&mut self, key: &'static str, value: u64) {
+    pub fn set_with_default_exp(&mut self, key: &'static str, value: Value) {
         self.set(key, value, DEFAULT_EXPIRATION)
     }
 
@@ -162,25 +163,25 @@ impl RCache {
         let mut items: Vec<(&str, Item)> = Vec::new();
         for key in keys.iter() {
             let value = c.items.get(key).unwrap();
-            items.push((key, *value));
+            items.push((key, value.clone()));
         }
         drop(c);
         return items;
     }
 
     // Get an item from the cache. Return NONE or item's object
-    pub fn get(&self, key: &'static str) -> Option<u64> {
+    pub fn get(&self, key: &'static str) -> Option<Value> {
         let c_lock = self.cache.clone();
         let c = c_lock.read().unwrap();
 
         if let Some(i) = c.items.get(key) {
             let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
             if i.expiration > Duration::from_secs(0) && now > i.expiration {
-                return Some(0);
+                return None;
             }
-            return Some(i.object);
+            return Some(i.object.clone());
         }
-        Some(0)
+        None
     }
 
     // Return the number of items in the cache.
@@ -200,13 +201,13 @@ mod tests {
     fn test_cache() {
         let mut tc = new(DEFAULT_EXPIRATION, Duration::from_secs(0));
 
-        assert_eq!(tc.get("a").unwrap(), 0);
-        assert_eq!(tc.get("b").unwrap(), 0);
-        assert_eq!(tc.get("C").unwrap(), 0);
+        assert!(tc.get("a").is_none());
+        assert!(tc.get("b").is_none());
+        assert!(tc.get("c").is_none());
 
-        tc.set("a", 1, DEFAULT_EXPIRATION);
-        tc.set("b", 2, DEFAULT_EXPIRATION);
-        tc.set("C", 3, DEFAULT_EXPIRATION);
+        tc.set("a", serde_json::json!(1), DEFAULT_EXPIRATION);
+        tc.set("b", serde_json::json!(2), DEFAULT_EXPIRATION);
+        tc.set("C", serde_json::json!(3), DEFAULT_EXPIRATION);
 
         assert_eq!(tc.get("a").unwrap(), 1);
         assert_eq!(tc.get("b").unwrap(), 2);
@@ -214,22 +215,34 @@ mod tests {
     }
 
     #[test]
+    fn test_type() {
+        let mut tc = new(DEFAULT_EXPIRATION, Duration::from_secs(0));
+        tc.set("a", serde_json::json!(1), DEFAULT_EXPIRATION);
+        tc.set("b", serde_json::json!(true), DEFAULT_EXPIRATION);
+        tc.set("c", serde_json::json!("c-value"), DEFAULT_EXPIRATION);
+
+        assert_eq!(tc.get("a").unwrap(), 1);
+        assert_eq!(tc.get("b").unwrap(), true);
+        assert_eq!(tc.get("c").unwrap(), "c-value");
+    }
+
+    #[test]
     fn test_cache_times() {
         let mut tc = new(Duration::from_secs(50), Duration::from_secs(1));
-        tc.set("a", 1, DEFAULT_EXPIRATION);
-        tc.set("b", 2, NO_EXPIRATION);
-        tc.set("c", 3, Duration::from_secs(20));
-        tc.set("d", 4, Duration::from_secs(70));
+        tc.set("a", serde_json::json!(1), DEFAULT_EXPIRATION);
+        tc.set("b", serde_json::json!(2), NO_EXPIRATION);
+        tc.set("c", serde_json::json!(3), Duration::from_secs(20));
+        tc.set("d", serde_json::json!(4), Duration::from_secs(70));
 
         thread::sleep(Duration::from_secs(25));
-        assert_eq!(tc.get("c").unwrap(), 0);
+        assert!(tc.get("c").is_none());
         assert_eq!(tc.get("b").unwrap(), 2);
 
         thread::sleep(Duration::from_secs(30));
-        assert_eq!(tc.get("a").unwrap(), 0);
+        assert!(tc.get("a").is_none());
 
         assert_eq!(tc.get("d").unwrap(), 4);
         thread::sleep(Duration::from_secs(20));
-        assert_eq!(tc.get("d").unwrap(), 0);
+        assert!(tc.get("d").is_none());
     }
 }
