@@ -37,6 +37,15 @@ pub fn new(default_expiration: Duration, clean_expiration: Duration) -> RCache {
     return new_cache_with_janitor(default_expiration, clean_expiration, items);
 }
 
+// Return a new cache from existing items map
+pub fn new_from(
+    default_expiration: Duration,
+    clean_expiration: Duration,
+    items: HashMap<&'static str, Item>,
+) -> RCache {
+    return new_cache_with_janitor(default_expiration, clean_expiration, items);
+}
+
 // Create a cache with janitor or not
 fn new_cache_with_janitor(
     default_expiration: Duration,
@@ -244,5 +253,28 @@ mod tests {
         assert_eq!(tc.get("d").unwrap(), 4);
         thread::sleep(Duration::from_secs(20));
         assert!(tc.get("d").is_none());
+    }
+
+    #[test]
+    fn test_new_from() {
+        let mut items: HashMap<&'static str, Item> = HashMap::new();
+        items.insert(
+            "a",
+            Item {
+                object: serde_json::json!(1),
+                expiration: Duration::from_secs(0),
+            },
+        );
+        items.insert(
+            "b",
+            Item {
+                object: serde_json::json!(2),
+                expiration: Duration::from_secs(0),
+            },
+        );
+
+        let tc = new_from(DEFAULT_EXPIRATION, Duration::from_secs(0), items);
+        assert_eq!(tc.get("a").unwrap(), 1);
+        assert_eq!(tc.get("b").unwrap(), 2);
     }
 }
