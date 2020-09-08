@@ -3,6 +3,7 @@ use serde_json::value::Value;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::thread;
+use std::thread::JoinHandle;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 pub const DEFAULT_EXPIRATION: Duration = Duration::from_secs(0);
@@ -32,7 +33,10 @@ pub struct Janitor {
 
 // Return a new cache with a given default expiration time and
 // cleanup interval, empty items map.
-pub fn new(default_expiration: Duration, clean_expiration: Duration) -> RCache {
+pub fn new(
+    default_expiration: Duration,
+    clean_expiration: Duration,
+) -> (RCache, Option<JoinHandle<()>>) {
     let items = HashMap::new();
     return new_cache_with_janitor(default_expiration, clean_expiration, items);
 }
@@ -42,7 +46,7 @@ pub fn new_from(
     default_expiration: Duration,
     clean_expiration: Duration,
     items: HashMap<&'static str, Item>,
-) -> RCache {
+) -> (RCache, Option<JoinHandle<()>>) {
     return new_cache_with_janitor(default_expiration, clean_expiration, items);
 }
 
@@ -51,21 +55,22 @@ fn new_cache_with_janitor(
     default_expiration: Duration,
     clean_expiration: Duration,
     items: HashMap<&'static str, Item>,
-) -> RCache {
+) -> (RCache, Option<JoinHandle<()>>) {
     let c = new_cache(default_expiration, clean_expiration, items);
     let mut c_clone = c.clone();
 
     // If cleanup interval gt 0, start cleanup janitor
     if clean_expiration > Duration::from_secs(0) {
-        let _ = thread::spawn(move || {
+        let handler = thread::spawn(move || {
             let ticker = tick(clean_expiration);
             loop {
                 ticker.recv().unwrap();
                 c_clone.delete_expired()
             }
         });
+        return (c, Some(handler));
     }
-    c
+    return (c, None);
 }
 
 pub fn new_cache(
