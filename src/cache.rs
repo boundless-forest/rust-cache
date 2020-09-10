@@ -213,7 +213,7 @@ mod tests {
 
     #[test]
     fn test_cache() {
-        let mut tc = new(DEFAULT_EXPIRATION, Duration::from_secs(0));
+        let (mut tc, _) = new(DEFAULT_EXPIRATION, Duration::from_secs(0));
 
         assert!(tc.get("a").is_none());
         assert!(tc.get("b").is_none());
@@ -230,7 +230,7 @@ mod tests {
 
     #[test]
     fn test_type() {
-        let mut tc = new(DEFAULT_EXPIRATION, Duration::from_secs(0));
+        let (mut tc, _) = new(DEFAULT_EXPIRATION, Duration::from_secs(0));
         tc.set("a", serde_json::json!(1), DEFAULT_EXPIRATION);
         tc.set("b", serde_json::json!(true), DEFAULT_EXPIRATION);
         tc.set("c", serde_json::json!("c-value"), DEFAULT_EXPIRATION);
@@ -242,7 +242,7 @@ mod tests {
 
     #[test]
     fn test_cache_times() {
-        let mut tc = new(Duration::from_secs(50), Duration::from_secs(1));
+        let (mut tc, _) = new(Duration::from_secs(50), Duration::from_secs(1));
         tc.set("a", serde_json::json!(1), DEFAULT_EXPIRATION);
         tc.set("b", serde_json::json!(2), NO_EXPIRATION);
         tc.set("c", serde_json::json!(3), Duration::from_secs(20));
@@ -278,7 +278,7 @@ mod tests {
             },
         );
 
-        let tc = new_from(DEFAULT_EXPIRATION, Duration::from_secs(0), items);
+        let (tc, _) = new_from(DEFAULT_EXPIRATION, Duration::from_secs(0), items);
         assert_eq!(tc.get("a").unwrap(), 1);
         assert_eq!(tc.get("b").unwrap(), 2);
     }
