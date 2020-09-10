@@ -9,15 +9,22 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 pub const DEFAULT_EXPIRATION: Duration = Duration::from_secs(0);
 pub const NO_EXPIRATION: Duration = Duration::from_secs(std::u64::MAX);
 
-#[derive(Clone, Debug)]
+type CallBackFuncType = Box<dyn Fn() + Send + Sync + 'static>;
+
+#[derive(Clone)]
 pub struct RCache {
     cache: Arc<RwLock<Cache>>,
 }
-#[derive(Debug)]
+// #[derive(Debug)]
 pub struct Cache {
     default_expiration: Duration,
     items: HashMap<&'static str, Item>,
     janitor: Janitor,
+    on_delete: CallBackFuncType,
+}
+
+fn print_delete() {
+    println!("delete item");
 }
 
 #[derive(Debug, Clone)]
@@ -90,6 +97,7 @@ pub fn new_cache(
         janitor: Janitor {
             interval: clean_expiration,
         },
+        on_delete: Box::new(print_delete),
     };
 
     return RCache {
@@ -160,6 +168,7 @@ impl RCache {
                     let (key, item) = entry;
                     if item.is_expired() {
                         let _ = cw.items.remove_entry(*key);
+                        (cw.on_delete)();
                     }
                 }
             }
