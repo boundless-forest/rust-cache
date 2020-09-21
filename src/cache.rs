@@ -158,6 +158,14 @@ impl RCache {
         c.items.clear()
     }
 
+    // Delete item by key
+    pub fn delete(&mut self, key: &'static str) {
+        let c_lock = self.cache.clone();
+        let mut c = c_lock.write().unwrap();
+
+        c.items.remove(key);
+    }
+
     // Delete all expired items from the cache
     pub fn delete_expired(&mut self) {
         let items = self.get_items();
