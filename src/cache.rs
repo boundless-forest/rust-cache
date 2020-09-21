@@ -142,6 +142,14 @@ impl RCache {
         self.set(key, value, DEFAULT_EXPIRATION)
     }
 
+    // Set a new value for the cache key if it already exists, and the existing
+    // item has not expired.
+    pub fn replace(&mut self, key: &'static str, value: Value, ed: Duration) {
+        if self.get(key).is_some() {
+            self.set(key, value, ed);
+        }
+    }
+
     // Delete all items from the cache
     pub fn flush(&mut self) {
         let c_lock = self.cache.clone();
